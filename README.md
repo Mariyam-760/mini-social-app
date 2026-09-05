@@ -1,142 +1,183 @@
 # Mini Social Post Application
 
-MERN mini social feed: signup/login (JWT + bcrypt), text/image/text+image posts, like/unlike (duplicate-safe), comments — all updating instantly in the UI. Original dark-navy, rounded-card, bottom-nav mobile-first UI inspired by TaskPlanet's social page (no proprietary assets copied).
+A full-stack MERN mini social feed where users sign up, log in, and share text and/or image posts to a shared public feed. Users can like/unlike posts and comment on them, with counts and updates reflected instantly in the UI.
 
-Exactly two MongoDB collections: `users` and `posts`. Likes and comments are embedded arrays on each Post document — no separate collections.
+## Features
 
-Images are stored as base64 data URIs directly on the Post document (not on disk). This is deliberate: Render's filesystem is ephemeral, so anything written to `backend/uploads` would be wiped on every redeploy/restart/scale event. Storing in MongoDB Atlas instead means images persist reliably and the same code works unchanged in local dev and production, with no third-party file storage service needed.
+- User signup and login
+- Secure password hashing (bcrypt)
+- JWT authentication with protected routes/endpoints
+- Create text-only posts
+- Create image-only posts
+- Create text + image posts
+- Public social feed (all users' posts, newest first)
+- Like/unlike posts, with duplicate-like prevention
+- Comments on posts
+- Live like count and comment count display
+- Users can like and comment on posts created by other users
+- Responsive, mobile-first UI with a fixed bottom navigation bar
 
-## 1. Backend install
+## Tech Stack
+
+**Frontend**
+- React.js (Vite)
+- React Router
+- Axios
+- Material UI (primary component library)
+- Bootstrap base styles (bootstrap CSS import; `react-bootstrap` included as a dependency per the required stack)
+- Custom CSS (dark navy theme, cards, layout)
+
+**Backend**
+- Node.js
+- Express.js
+- JWT (`jsonwebtoken`) for authentication
+- bcrypt for password hashing
+- Multer for handling image upload (in-memory, converted to base64)
+
+**Database**
+- MongoDB Atlas
+- Mongoose
+
+## Project Structure
+
+```
+mini-social-app/
+├── backend/
+│   ├── config/         # db.js (Mongo connection), upload.js (Multer + base64 conversion)
+│   ├── controllers/     # authController.js, postController.js
+│   ├── middleware/      # auth.js (JWT guard), errorHandler.js
+│   ├── models/          # User.js, Post.js
+│   ├── routes/          # authRoutes.js, postRoutes.js
+│   ├── server.js         # Express app entry point
+│   └── package.json
+├── frontend/
+│   ├── src/
+│   │   ├── components/   # Header, BottomNav, CreatePost, PostCard, CommentSection, ProtectedRoute
+│   │   ├── context/       # AuthContext (JWT + user state, persisted to localStorage)
+│   │   ├── pages/         # Signup.jsx, Login.jsx, Social.jsx
+│   │   ├── services/      # api.js (axios instance), authService.js, postService.js
+│   │   ├── App.jsx
+│   │   └── main.jsx
+│   └── package.json
+└── README.md
+```
+
+**Backend folders explained**
+- `config/` — database connection and Multer upload configuration.
+- `controllers/` — request handlers for auth (signup/login) and posts (feed, create, like, comment).
+- `middleware/` — JWT verification (`protect`) and centralized error handling.
+- `models/` — Mongoose schemas for `User` and `Post`.
+- `routes/` — Express route definitions mapping URLs to controllers.
+
+**Frontend folders explained**
+- `components/` — reusable UI pieces (header, bottom nav, post creation form, post card, comment section, route guard).
+- `context/` — global authentication state via React Context, backed by `localStorage`.
+- `pages/` — top-level routed views (Signup, Login, Social feed).
+- `services/` — Axios instance and API call wrappers for auth and posts.
+
+## Database Design
+
+The application uses exactly **two** MongoDB collections:
+
+1. **`users`** — stores account data: `username`, `email`, `passwordHash` (bcrypt hash, never the plain password), `createdAt`.
+2. **`posts`** — stores each post's `userId`, `username`, `text`, `image` (base64 data URI or `null`), `createdAt`, plus two embedded arrays:
+   - `likes` — one entry per user who liked the post (`userId`, `username`).
+   - `comments` — one entry per comment (`userId`, `username`, `text`, `createdAt`).
+
+Likes and comments are stored **inside** each post document rather than in their own collections, so no additional MongoDB collections are required.
+
+## Authentication Flow
+
+1. **Signup** — user submits username/email/password → backend hashes the password with bcrypt and stores the user in the `users` collection.
+2. **Login** — backend verifies the email/password against the stored hash and issues a JWT containing the user's id and username.
+3. **JWT authentication** — the frontend stores the token (and user info) in `localStorage` and attaches it as an `Authorization: Bearer <token>` header on every request.
+4. **Protected actions** — creating a post, liking/unliking, and commenting all pass through backend middleware (`protect`) that verifies the JWT before allowing the action.
+5. **Logout** — the frontend clears the token/user from `localStorage`, ending the session client-side.
+
+## Application Flow
+
+Signup/Login → land on the Social feed → create a post (text, image, or both) → the post appears at the top of the public feed → any logged-in user can like/unlike or comment on any post → all changes (users, posts, likes, comments) are persisted in MongoDB and reflected instantly in the UI without a page refresh.
+
+## Local Setup
+
+**Backend**
 ```
 cd backend
 npm install
+npm run dev
 ```
 
-## 2. Frontend install
+**Frontend**
 ```
 cd frontend
 npm install
+npm run dev
 ```
 
-## 3. MongoDB Atlas setup
-1. Create a free cluster at https://cloud.mongodb.com.
-2. Database Access → add a database user (username + password).
-3. Network Access → add IP `0.0.0.0/0` (or your machine's IP for local-only).
-4. Database → Connect → Drivers → copy the `mongodb+srv://...` connection string.
+### Environment variables
 
-## 4. Backend `.env` configuration
-Copy the example and fill in real values (never commit `.env` — it's gitignored):
-```
-cd backend
-cp .env.example .env
-```
-Edit `backend/.env`:
+Create your own `.env` files locally (never commit them — they are excluded via `.gitignore`).
+
+**`backend/.env`**
 ```
 PORT=5000
 NODE_ENV=development
-MONGO_URI=mongodb+srv://<user>:<password>@<cluster-url>/mini-social?retryWrites=true&w=majority
-JWT_SECRET=<a long random string>
+MONGO_URI=your-mongodb-atlas-connection-string
+JWT_SECRET=your-own-long-random-secret
 JWT_EXPIRES_IN=7d
 CLIENT_URL=http://localhost:5173
 ```
 
-## 5. Start backend
+**`frontend/.env`** (only needed when the backend is not running on the same host as the Vite dev proxy, e.g. in production)
 ```
-cd backend
-npm run dev        # or: npm start
+VITE_API_URL=your-deployed-backend-url/api
 ```
-Runs on `http://localhost:5000`. Check `http://localhost:5000/api/health` → `{"status":"ok"}`.
 
-## 6. Start frontend
-```
-cd frontend
-npm run dev
-```
-Runs on `http://localhost:5173`. `/api` calls are proxied to `localhost:5000` by `vite.config.js` — no frontend `.env` needed for local dev (leave `VITE_API_URL` unset).
+Reference `.env.example` files are provided in both `backend/` and `frontend/` with placeholder values only.
 
-## 7. Local URLs
-- Frontend: http://localhost:5173
-- Backend API: http://localhost:5000/api
-- Health check: http://localhost:5000/api/health
+## API Endpoints
 
-## 8. Manual test checklist
-1. Go to `/signup`, create an account → redirected to `/social`.
-2. Log out, log back in at `/login` with the same credentials.
-3. Create a text-only post, an image-only post, and a text+image post.
-4. Try submitting an empty post → should be blocked (button disabled / error shown).
-5. Like a post → count increments instantly, icon fills. Click again → unlikes, count decrements. Refresh the page → state is correct (fetched from DB, not just local state).
-6. Log in as a second user (different browser/incognito) → like the same post → confirm both users appear correctly and neither can double-like.
-7. Add a comment → appears instantly with your username and timestamp, comment count increments.
-8. Open browser dev tools → Network tab → confirm `/api/posts`, `/api/posts/:id/like`, `/api/posts/:id/comment` all require the `Authorization: Bearer <token>` header, and that calling them without a token (e.g. after clearing localStorage) returns `401`.
+| Method | Endpoint | Purpose | Auth required |
+|---|---|---|---|
+| POST | `/api/auth/signup` | Register a new user | No |
+| POST | `/api/auth/login` | Log in and receive a JWT | No |
+| GET | `/api/auth/me` | Get the current authenticated user's profile | Yes |
+| GET | `/api/posts` | Fetch the public feed (newest first) | No |
+| POST | `/api/posts` | Create a post (text and/or image, via `multipart/form-data`) | Yes |
+| POST | `/api/posts/:id/like` | Toggle like/unlike on a post | Yes |
+| POST | `/api/posts/:id/comment` | Add a comment to a post | Yes |
+| GET | `/api/health` | Health check | No |
 
-## 9. Production deployment
+## Deployment
 
-**GitHub**
-```
-git init
-git add .
-git commit -m "Mini social app"
-git branch -M main
-git remote add origin <your-repo-url>
-git push -u origin main
-```
-`.env` files are gitignored at the root, backend, and frontend level — only `.env.example` files are tracked.
+- **Frontend** → Vercel (Vite build, output directory `dist`)
+- **Backend** → Render (Node web service)
+- **Database** → MongoDB Atlas
 
-**MongoDB Atlas** — same cluster as local setup; just make sure Network Access allows Render's egress (`0.0.0.0/0` is simplest for a student project).
+Key environment variables for deployment:
+- **Render (backend):** `MONGO_URI`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `CLIENT_URL` (set to the deployed Vercel URL), `NODE_ENV=production`.
+- **Vercel (frontend):** `VITE_API_URL` (set to the deployed Render backend URL + `/api`).
+- **MongoDB Atlas:** connection string used as `MONGO_URI`; network access must allow the backend host to connect.
 
-**Render (backend)**
-1. New → Web Service → connect your GitHub repo.
-2. Root Directory: `backend`
-3. Build Command: `npm install`
-4. Start Command: `npm start`
-5. Add environment variables (see table below).
-6. Deploy → note the URL, e.g. `https://mini-social-backend.onrender.com`.
-(A `backend/render.yaml` blueprint is included if you prefer Render's "Blueprint" import instead of manual setup.)
+## Security
 
-**Vercel (frontend)**
-1. New Project → import the same GitHub repo.
-2. Root Directory: `frontend`
-3. Framework preset: Vite (auto-detected). Build Command: `npm run build`. Output Directory: `dist`.
-4. Add environment variable `VITE_API_URL` = `https://mini-social-backend.onrender.com/api` (your actual Render URL + `/api`).
-5. Deploy → note the URL, e.g. `https://mini-social-app.vercel.app`.
-6. `frontend/vercel.json` is included so client-side routes (`/social`, `/login`) don't 404 on refresh.
-7. Go back to Render and set `CLIENT_URL` to this Vercel URL (see below), then redeploy the backend so CORS allows it.
+- Passwords are hashed with bcrypt before being stored — plain-text passwords are never saved.
+- Authentication and route protection use JWT.
+- All secrets (Mongo connection string, JWT secret, client URL) are stored in environment variables, not in source code.
+- `.env` files are excluded from Git via `.gitignore`; only `.env.example` placeholder files are committed.
 
-### Required environment variables
+## Assignment Requirements Checklist
 
-| Where | Variable | Value |
-|---|---|---|
-| Local backend (`backend/.env`) | `MONGO_URI` | Your Atlas connection string |
-| | `JWT_SECRET` | Long random string |
-| | `JWT_EXPIRES_IN` | e.g. `7d` |
-| | `CLIENT_URL` | `http://localhost:5173` |
-| | `PORT` | `5000` |
-| Render backend | `MONGO_URI` | Your Atlas connection string |
-| | `JWT_SECRET` | Long random string (different from any dev value) |
-| | `JWT_EXPIRES_IN` | e.g. `7d` |
-| | `CLIENT_URL` | Your Vercel URL, e.g. `https://mini-social-app.vercel.app` (comma-separate multiple origins if needed) |
-| | `NODE_ENV` | `production` |
-| Vercel frontend | `VITE_API_URL` | Your Render URL + `/api`, e.g. `https://mini-social-backend.onrender.com/api` |
+- [x] Account creation (signup/login with hashed passwords + JWT)
+- [x] Create post (text-only, image-only, text + image)
+- [x] Public feed (all users' posts, newest first)
+- [x] Like/unlike posts with duplicate-like prevention, and comments
+- [x] Exactly two MongoDB collections (`users`, `posts`) — likes/comments embedded in posts
+- [x] React frontend
+- [x] Node.js + Express backend
+- [x] MongoDB (via Mongoose, hosted on MongoDB Atlas)
+- [x] No Tailwind CSS used
 
-## Honesty note on testing in this environment
+## Author
 
-This sandbox has no network access and no local MongoDB installed, so I could not run `npm install`, start a live server, or execute the checklist above myself here. Every backend file passes `node --check` and every frontend file passes an `esbuild` syntax check, and I traced the request/response flow by hand (auth, post creation with base64 image conversion, like/unlike dedup, comment updates, CORS, env var usage) — but that is static verification, not a live test run. Please run the checklist in section 8 yourself after `npm install`; tell me the exact error if anything fails and I'll fix it directly.
-
-## Structure
-```
-backend/
-  config/       db.js (Mongo connection), upload.js (multer memory storage -> base64)
-  controllers/  authController.js, postController.js
-  middleware/   auth.js (JWT guard), errorHandler.js
-  models/       User.js, Post.js (only 2 collections; likes/comments embedded)
-  routes/       authRoutes.js, postRoutes.js
-  server.js
-  render.yaml   optional Render blueprint
-
-frontend/src/
-  components/   Header, BottomNav, CreatePost, PostCard, CommentSection, ProtectedRoute
-  context/      AuthContext (JWT + user in localStorage)
-  pages/        Signup, Login, Social
-  services/     api.js (axios + VITE_API_URL), authService.js, postService.js
-  vercel.json   SPA rewrite for client-side routing
-```
+Developed as a Mini Social Post Application project.
