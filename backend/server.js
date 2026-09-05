@@ -10,13 +10,10 @@ const app = express();
 
 connectDB();
 
-// CLIENT_URL supports a comma-separated list so both a local dev origin and a
-// deployed Vercel origin can be allowed at once, e.g.
-// CLIENT_URL="http://localhost:5173,https://your-app.vercel.app"
-const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
-  .split(',')
-  .map((o) => o.trim())
-  .filter(Boolean);
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://mini-social-app-gray-eight.vercel.app',
+];
 
 app.use(
   cors({
