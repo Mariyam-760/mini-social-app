@@ -1,0 +1,24 @@
+# Optional: Render "Blueprint" for this service. You can also just create a
+# Web Service manually in the Render dashboard (Root Directory: backend,
+# Build Command: npm install, Start Command: npm start) and skip this file.
+services:
+  - type: web
+    name: mini-social-backend
+    env: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: CLIENT_URL
+        sync: false
